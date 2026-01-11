@@ -8,6 +8,9 @@
 #include "color.h"
 
 template <typename T>
+void drawSegment(Image<T>& image, point2i from, point2i to, Color<T> c, int size=1);
+
+template <typename T>
 void drawPoint(Image<T>& image, point2i pixel, Color<T> c, int size=1);
 
 template <typename T>

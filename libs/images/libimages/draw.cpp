@@ -64,6 +64,38 @@ void drawPointImpl(Image<T>& image, point2i pixel, const C& cc, int size) {
 } // namespace
 
 template <typename T>
+void drawSegment(Image<T>& image, point2i from, point2i to, Color<T> c, int size) {
+    // Allow drawing partially outside, but at least handle empty image
+    rassert(image.width() > 0 && image.height() > 0, 91283712);
+
+    // Bresenham on integer grid
+    int x0 = from.x;
+    int y0 = from.y;
+    const int x1 = to.x;
+    const int y1 = to.y;
+
+    const int dx = std::abs(x1 - x0);
+    const int dy = std::abs(y1 - y0);
+    const int sx = (x0 < x1) ? 1 : -1;
+    const int sy = (y0 < y1) ? 1 : -1;
+
+    int err = dx - dy;
+
+    while (true) {
+        // drawPointImpl already checks bounds for the center pixel, so we must guard it here
+        if (x0 >= 0 && x0 < image.width() && y0 >= 0 && y0 < image.height()) {
+            drawPointImpl(image, point2i{x0, y0}, c, size);
+        }
+
+        if (x0 == x1 && y0 == y1) break;
+
+        const int e2 = 2 * err;
+        if (e2 > -dy) { err -= dy; x0 += sx; }
+        if (e2 <  dx) { err += dx; y0 += sy; }
+    }
+}
+
+template <typename T>
 void drawPoint(Image<T>& image, point2i pixel, Color<T> c, int size) {
     drawPointImpl(image, pixel, c, size);
 }
@@ -76,6 +108,9 @@ void drawPoints(Image<T>& image, const std::vector<point2i>& pixels, Color<T> c,
 }
 
 // Explicit instantiations
+template void drawSegment<std::uint8_t>(Image<std::uint8_t>& image, point2i from, point2i to, Color<uint8_t> c, int size);
+template void drawSegment<float>(Image<float>& image, point2i from, point2i to, Color<float> c, int size);
+
 template void drawPoint<std::uint8_t>(Image<std::uint8_t>& image, point2i pixel, Color<uint8_t> c, int size);
 template void drawPoint<float>(Image<float>& image, point2i pixel, Color<float> c, int size);
 
