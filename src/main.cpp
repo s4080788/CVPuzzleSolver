@@ -19,6 +19,7 @@
 #include <libimages/image_io.h>
 
 #include <iostream>
+#include <unordered_map>
 
 #include "sides_comparison_utils.h"
 
@@ -42,7 +43,7 @@ int main() {
 
         // создание визуализации каждой пары сопоставлений занимает большое время, поэтому оставим этот выключатель на будущее
         // когда нужен просто результат без анализа - можно будет выключить
-        bool draw_sides_matching_plots = true;
+        bool draw_sides_matching_plots = false;
 
         Timer all_images_t;
         for (const std::string &image_name: to_process) {
@@ -336,25 +337,76 @@ int main() {
                 }
             }
 
+            std::unordered_map<std::string, std::vector<std::vector<MatchedSide>>> correct_matches;
+            {
+                // захаркодим ответы для маленькой картинки, чтобы всегда сразу видеть сколько ответов у нас верно,
+                // а сколько - нет
+                // благодаря детерминизму алгоритма (у нас даже все FastRandom ведут себя из раза в раз - ОДИНАКОВО)
+                // от запуска к запуску все четко повторяется, включая нумерацию объектов и сторон
+                // поэтому возможно вручную фиксировать правильный ответ
+                std::vector<std::vector<MatchedSide>> answers(objects_count);
+                for (int obj = 0; obj < objects_count; ++obj) {
+                    answers[obj].resize(objSides[obj].size());
+                }
+                answers[0][0] = MatchedSide(1, 2, 239, 239);
+                answers[0][1] = MatchedSide(3, 3, 239, 239);
+                answers[1][0] = MatchedSide(2, 3, 239, 239);
+                answers[1][1] = MatchedSide(5, 3, 239, 239);
+                answers[1][2] = MatchedSide(0, 0, 239, 239);
+                answers[2][2] = MatchedSide(4, 3, 239, 239);
+                answers[2][3] = MatchedSide(1, 0, 239, 239);
+                answers[3][0] = MatchedSide(5, 2, 239, 239);
+                answers[3][3] = MatchedSide(0, 1, 239, 239);
+                answers[4][2] = MatchedSide(5, 0, 239, 239);
+                answers[4][3] = MatchedSide(2, 2, 239, 239);
+                answers[5][0] = MatchedSide(4, 2, 239, 239);
+                answers[5][2] = MatchedSide(3, 0, 239, 239);
+                answers[5][3] = MatchedSide(1, 1, 239, 239);
+
+                correct_matches["00_photo_six_parts_downscaled_x4"] = answers;
+            }
+
             {
                 // нарисуем отрезками сопоставления между сторонами
                 int segment_thickness = 5;
                 image8u segments_between_matched_sides = image;
                 FastRandom r(2391);
+                int correct_matches_count = 0;
+                int incorrect_matches_count = 0;
                 for (int objA = 0; objA < objects_count; ++objA) {
                     // все сопоставления исходящие из сторон этого объекта - будут одного случайного цвета
                     color8u random_color_for_object = {(uint8_t) r.nextInt(0, 255), (uint8_t) r.nextInt(0, 255), (uint8_t) r.nextInt(0, 255)};
                     point2i random_shift = {r.nextInt(-segment_thickness, segment_thickness), r.nextInt(-segment_thickness, segment_thickness)}; // это нужно чтобы встречные ребра не наслоились закрыв друг друга, а было легко видеть что это два ребра
                     for (int sideA = 0; sideA < objSides[objA].size(); ++sideA) {
                         auto [objB, sideB, differenceBest, differenceSecondBest] = objMatchedSides[objA][sideA];
-                        if (differenceBest == -1)
+
+                        if (correct_matches.count(image_name)) {
+                            auto [expectedObjB, expectedSideB, _, __] = correct_matches[image_name][objA][sideA];
+                            if (expectedObjB == objB && expectedSideB == sideB) {
+                                correct_matches_count++;
+                            } else {
+                                incorrect_matches_count++;
+                                std::cerr << "EXPECTED: obj" << objA << "-side" <<sideA << " -> obj" << expectedObjB << "-side" << expectedSideB << " with difference=" << differenceBest << " (second best: " << differenceSecondBest << ")" << " - BUT FOUND:" << std::endl;
+                                if (differenceBest == -1) {
+                                    std::cerr << "obj" << objA << "-side" <<sideA << " -> obj" << objB << "-side" << sideB << " with difference=" << differenceBest << " (second best: " << differenceSecondBest << ")" << std::endl;
+                                }
+                            }
+                        }
+
+                        if (differenceBest == -1) {
                             continue;
+                        }
+
                         std::cout << "obj" << objA << "-side" <<sideA << " -> obj" << objB << "-side" << sideB << " with difference=" << differenceBest << " (second best: " << differenceSecondBest << ")" << std::endl;
                         point2i sideACenter = objOffsets[objA] + objSides[objA][sideA][objSides[objA][sideA].size() / 2]; // вершина в середине стороны A
                         point2i sideBCenter = objOffsets[objB] + objSides[objB][sideB][objSides[objB][sideB].size() / 2]; // вершина в середине сопоставленной с ней стороны B
                         drawPoint(segments_between_matched_sides, random_shift + sideACenter, random_color_for_object, 4 * segment_thickness);
                         drawSegment(segments_between_matched_sides, random_shift + sideACenter, random_shift + sideBCenter, random_color_for_object, segment_thickness);
                     }
+                }
+                if (correct_matches.count(image_name)) {
+                    std::cout << "correct matches: " << correct_matches_count << std::endl;
+                    std::cout << "incorrect matches: " << incorrect_matches_count << std::endl;
                 }
                 debug_io::dump_image(debug_dir + "07_matched_sides.jpg", segments_between_matched_sides);
             }
